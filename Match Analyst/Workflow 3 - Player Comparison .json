@@ -1,0 +1,940 @@
+{
+  "name": "Workflow 3 - Player Comparison",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "player-comparison",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "8199e231-c211-4ac0-a2e0-136cd642774b",
+      "name": "Player Comparison Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        448
+      ],
+      "webhookId": "677711e0-dec5-4c93-9aca-2b6728900d66"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "player1",
+              "value": "={{ $json.body?.player1 ?? $json.player1 ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a2",
+              "name": "player2",
+              "value": "={{ $json.body?.player2 ?? $json.player2 ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "a3",
+              "name": "fixtureId",
+              "value": "={{ $json.body?.fixture_id ?? $json.fixture_id ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "40899109-c0ae-4a83-97f7-f75a06e511be",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst errors = [];\nconst player1 = (item.player1 || '').trim();\nconst player2 = (item.player2 || '').trim();\nconst fixtureId = (item.fixtureId || '').toString().trim();\nif (!player1) errors.push('player1 is required');\nif (!player2) errors.push('player2 is required');\nif (!fixtureId) errors.push('fixture_id is required — please analyze a match first before comparing players');\nif (player1 && player2 && player1.toLowerCase() === player2.toLowerCase()) errors.push('player1 and player2 must be different');\nreturn [{\n  json: {\n    player1,\n    player2,\n    fixtureId,\n    hasFixtureId: !!fixtureId,\n    isValid: errors.length === 0,\n    errors\n  }\n}];"
+      },
+      "id": "7ee95d5c-4c2c-4af5-9253-b7f2a61fa806",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isValid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": "",
+              "id": "cb60b0db-2a6b-40f4-a547-f443f31b2951"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f7a5cf26-3729-4699-a004-a3e2f1d0b3b8",
+      "name": "Is Input Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.hasFixtureId }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": "",
+              "id": "71f30ac1-f055-4efa-a546-36a3a7a569c5"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d24d2cb4-9b63-43ec-9402-e92914ba1fed",
+      "name": "Has Fixture ID?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        896,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://v3.football.api-sports.io/fixtures/players",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fixture",
+              "value": "={{ $json.fixtureId }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "38aaa73a-eabe-4ef5-8c8b-2d2c25e8bb2e",
+      "name": "Fetch Fixture Players",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        256
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "avz2FQoEogFyTcwM",
+          "name": "API-Football"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate Input').first().json;\nconst teamBlocks = $('Fetch Fixture Players').first().json.response || [];\nconst allPlayers = [];\nfor (const block of teamBlocks) {\n  for (const p of (block.players || [])) {\n    allPlayers.push(p);\n  }\n}\nfunction findPlayer(name) {\n  const lower = name.toLowerCase();\n  return allPlayers.find(p => p.player && p.player.name && p.player.name.toLowerCase().includes(lower)) || null;\n}\nfunction extractMetrics(p) {\n  if (!p) return null;\n  const stats = (p.statistics && p.statistics[0]) || {};\n  return {\n    name: p.player.name,\n    playerId: p.player.id,\n    minutesPlayed: (stats.games && stats.games.minutes) || 0,\n    rating: parseFloat(stats.games && stats.games.rating) || null,\n    goals: (stats.goals && stats.goals.total) || 0,\n    assists: (stats.goals && stats.goals.assists) || 0,\n    shotsTotal: (stats.shots && stats.shots.total) || 0,\n    shotsOnTarget: (stats.shots && stats.shots.on) || 0,\n    passesTotal: (stats.passes && stats.passes.total) || 0,\n    keyPasses: (stats.passes && stats.passes.key) || 0,\n    passAccuracy: (stats.passes && stats.passes.accuracy) || null,\n    tackles: (stats.tackles && stats.tackles.total) || 0,\n    duelsWon: (stats.duels && stats.duels.won) || 0\n  };\n}\nconst p1Match = findPlayer(ctx.player1);\nconst p2Match = findPlayer(ctx.player2);\nconst errors = [];\nif (!p1Match) errors.push('\"' + ctx.player1 + '\" is not in either squad for this match. Please enter a player who played in this fixture.');\nif (!p2Match) errors.push('\"' + ctx.player2 + '\" is not in either squad for this match. Please enter a player who played in this fixture.');\nreturn [{\n  json: {\n    mode: 'match',\n    fixtureId: ctx.fixtureId,\n    playersFound: errors.length === 0,\n    errors,\n    player1Metrics: extractMetrics(p1Match),\n    player2Metrics: extractMetrics(p2Match)\n  }\n}];"
+      },
+      "id": "0a3e83af-d7c9-4d11-826f-d30cf9b7cdfe",
+      "name": "Build Match-Based Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.playersFound }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": "",
+              "id": "868784b6-d9c8-4b29-aa61-96c99a6f613d"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "899f10af-048f-4b10-ab95-efd89e2ce941",
+      "name": "Are Players Found In Match?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Player metrics from this match (JSON):\n{{ JSON.stringify({ player1: $json.player1Metrics, player2: $json.player2Metrics }) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You compare two football players using ONLY the supplied metrics. Write a comparison in 3 sentences or fewer that references only the metrics provided (e.g. rating, goals, assists, shots, passes, tackles). Do not invent any statistic not present in the data. Return strictly as JSON matching the required schema with a single \"comparison\" field containing your 3-sentence-or-fewer text."
+        }
+      },
+      "id": "da24fe36-41ec-4d5a-af70-bb25c6b19dfe",
+      "name": "AI Comparison Agent (Match)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"comparison\":\"string\"}"
+      },
+      "id": "858f0da1-ba00-4c84-ac57-a7a003017c2c",
+      "name": "Comparison Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1936,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Match-Based Metrics').first().json;\nconst ai = $('AI Comparison Agent (Match)').first().json.output || {};\nreturn [{\n  json: {\n    success: true,\n    mode: 'match',\n    fixtureId: ctx.fixtureId,\n    player1: ctx.player1Metrics,\n    player2: ctx.player2Metrics,\n    comparison: ai.comparison || null\n  }\n}];"
+      },
+      "id": "abfe1286-8209-4341-a3d8-7fc89490ebae",
+      "name": "Assemble Match Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "89bd9e37-8b51-47ef-939c-a5a2e6256485",
+      "name": "Respond Match Comparison",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2384,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"errors\": $json.errors } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "5cd2c558-420a-45e8-9b8d-095ce37bc96e",
+      "name": "Respond Match Players Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1856,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://v3.football.api-sports.io/players/profiles",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search",
+              "value": "={{ $json.player1 }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "48ad179c-0c6e-418a-bdf1-1c341f3cb013",
+      "name": "Search Player 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        592
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "avz2FQoEogFyTcwM",
+          "name": "API-Football"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://v3.football.api-sports.io/players/profiles",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search",
+              "value": "={{ $(\"Validate Input\").item.json.player2 }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "cf2a4905-c29a-47c8-b9f5-180320dd5e31",
+      "name": "Search Player 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        592
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "avz2FQoEogFyTcwM",
+          "name": "API-Football"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Validate Input').first().json;\nconst player1Results = $('Search Player 1').first().json.response || [];\nconst player2Results = $('Search Player 2').first().json.response || [];\nfunction exactMatch(results, name) {\n  const lower = name.toLowerCase();\n  let match = results.find(r => r.player && r.player.name && r.player.name.toLowerCase().includes(lower));\n  if (!match && results.length > 0) match = results[0];\n  return match ? match.player : null;\n}\nconst player1 = exactMatch(player1Results, ctx.player1);\nconst player2 = exactMatch(player2Results, ctx.player2);\nconst errors = [];\nif (!player1) errors.push('Could not find player1: ' + ctx.player1);\nif (!player2) errors.push('Could not find player2: ' + ctx.player2);\nconst now = new Date();\nconst month = now.getUTCMonth() + 1;\nconst year = now.getUTCFullYear();\nconst currentSeason = month >= 7 ? year : year - 1;\nreturn [{\n  json: {\n    mode: 'season',\n    player1Id: player1 ? player1.id : null,\n    player1Name: player1 ? player1.name : ctx.player1,\n    player2Id: player2 ? player2.id : null,\n    player2Name: player2 ? player2.name : ctx.player2,\n    currentSeason,\n    playersResolved: errors.length === 0,\n    errors\n  }\n}];"
+      },
+      "id": "b20f3ccd-b10c-4900-b2f4-f4d900b0545e",
+      "name": "Determine Current Season",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.playersResolved }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": "",
+              "id": "069c8393-cba9-4408-b65e-9f618b1d7fcb"
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0cc21b7f-4ca7-41be-a427-1022522134a2",
+      "name": "Are Players Resolved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1856,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://v3.football.api-sports.io/players",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $json.player1Id }}"
+            },
+            {
+              "name": "season",
+              "value": "={{ $json.currentSeason }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "0fc08f71-a438-4391-960d-6238ad4b0992",
+      "name": "Fetch Player 1 Season Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2144,
+        448
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "avz2FQoEogFyTcwM",
+          "name": "API-Football"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://v3.football.api-sports.io/players",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "={{ $(\"Determine Current Season\").first().json.player2Id }}"
+            },
+            {
+              "name": "season",
+              "value": "={{ $(\"Determine Current Season\").first().json.currentSeason }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "04e31b18-a81a-470c-8b33-da73cb1a204c",
+      "name": "Fetch Player 2 Season Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2368,
+        448
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "avz2FQoEogFyTcwM",
+          "name": "API-Football"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Determine Current Season').first().json;\nconst p1Response = ($('Fetch Player 1 Season Stats').first().json.response || [])[0] || null;\nconst p2Response = ($('Fetch Player 2 Season Stats').first().json.response || [])[0] || null;\nfunction aggregateMetrics(playerResponse, fallbackName) {\n  if (!playerResponse) return null;\n  const statsList = playerResponse.statistics || [];\n  let goals = 0, assists = 0, appearances = 0, minutes = 0, yellow = 0, red = 0, shotsTotal = 0, shotsOnTarget = 0, passesTotal = 0, keyPasses = 0, tacklesTotal = 0, ratingSum = 0, ratingCount = 0;\n  for (const s of statsList) {\n    goals += (s.goals && s.goals.total) || 0;\n    assists += (s.goals && s.goals.assists) || 0;\n    appearances += (s.games && s.games.appearences) || 0;\n    minutes += (s.games && s.games.minutes) || 0;\n    yellow += (s.cards && s.cards.yellow) || 0;\n    red += (s.cards && s.cards.red) || 0;\n    shotsTotal += (s.shots && s.shots.total) || 0;\n    shotsOnTarget += (s.shots && s.shots.on) || 0;\n    passesTotal += (s.passes && s.passes.total) || 0;\n    keyPasses += (s.passes && s.passes.key) || 0;\n    tacklesTotal += (s.tackles && s.tackles.total) || 0;\n    const r = parseFloat(s.games && s.games.rating);\n    if (!isNaN(r)) { ratingSum += r; ratingCount++; }\n  }\n  return {\n    name: (playerResponse.player && playerResponse.player.name) || fallbackName,\n    playerId: playerResponse.player ? playerResponse.player.id : null,\n    appearances,\n    minutesPlayed: minutes,\n    goals,\n    assists,\n    yellowCards: yellow,\n    redCards: red,\n    shotsTotal,\n    shotsOnTarget,\n    passesTotal,\n    keyPasses,\n    tacklesTotal,\n    averageRating: ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 100) / 100 : null\n  };\n}\nconst p1 = aggregateMetrics(p1Response, ctx.player1Name);\nconst p2 = aggregateMetrics(p2Response, ctx.player2Name);\nreturn [{\n  json: {\n    mode: 'season',\n    season: ctx.currentSeason,\n    playersFound: !!(p1 && p2),\n    errors: [],\n    player1Metrics: p1,\n    player2Metrics: p2\n  }\n}];"
+      },
+      "id": "b4683a6d-1dc7-4390-8986-468a6570ab43",
+      "name": "Build Season-Based Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2592,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Player season metrics (JSON):\n{{ JSON.stringify({ season: $json.season, player1: $json.player1Metrics, player2: $json.player2Metrics }) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You compare two football players using ONLY the supplied season metrics. Write a comparison in 3 sentences or fewer that references only the metrics provided (e.g. goals, assists, appearances, average rating, cards). Do not invent any statistic not present in the data. Return strictly as JSON matching the required schema with a single \"comparison\" field containing your 3-sentence-or-fewer text.\nReturn ONLY the raw JSON object. Do not wrap it in markdown code fences, do not add any explanatory text before or after it, and do not include backticks."
+        }
+      },
+      "id": "8b28fdab-1e43-4dc3-8957-8823b0529bf5",
+      "name": "AI Comparison Agent (Season)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2752,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ctx = $('Build Season-Based Metrics').first().json;\nconst ai = $('AI Comparison Agent (Season)').first().json.output || {};\nreturn [{\n  json: {\n    success: true,\n    mode: 'season',\n    season: ctx.season,\n    player1: ctx.player1Metrics,\n    player2: ctx.player2Metrics,\n    comparison: ai.comparison || null\n  }\n}];"
+      },
+      "id": "4f5930dc-2f96-4b76-9553-ad11dd60ba45",
+      "name": "Assemble Season Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "c85074dd-a09a-46fc-bed2-c6dbecc6d635",
+      "name": "Respond Season Comparison",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3392,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"errors\": $json.errors } }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "a9bf83f7-a88b-4a3a-a0e0-0eeb0f61a0f8",
+      "name": "Respond Player Resolution Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2144,
+        688
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"errors\": $json.errors } }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "dadf6dba-a480-40b9-a60e-c2664cbf51e5",
+      "name": "Respond Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        848,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        240
+      ],
+      "id": "e308a136-ce51-4678-a5cd-e5561132f209",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "aiTf7bE9SmZ6iMHm",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        2800,
+        304
+      ],
+      "id": "3222b1e6-49f4-497d-a002-173ed54d2e0c",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "aiTf7bE9SmZ6iMHm",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Player Comparison Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Is Input Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Input Valid?": {
+      "main": [
+        [
+          {
+            "node": "Has Fixture ID?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Fixture ID?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fixture Players",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Player 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fixture Players": {
+      "main": [
+        [
+          {
+            "node": "Build Match-Based Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Match-Based Metrics": {
+      "main": [
+        [
+          {
+            "node": "Are Players Found In Match?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Are Players Found In Match?": {
+      "main": [
+        [
+          {
+            "node": "AI Comparison Agent (Match)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Match Players Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Comparison Agent (Match)": {
+      "main": [
+        [
+          {
+            "node": "Assemble Match Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comparison Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Comparison Agent (Match)",
+            "type": "ai_outputParser",
+            "index": 0
+          },
+          {
+            "node": "AI Comparison Agent (Season)",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Match Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Match Comparison",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Player 1": {
+      "main": [
+        [
+          {
+            "node": "Search Player 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Player 2": {
+      "main": [
+        [
+          {
+            "node": "Determine Current Season",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Current Season": {
+      "main": [
+        [
+          {
+            "node": "Are Players Resolved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Are Players Resolved?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Player 1 Season Stats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Player Resolution Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Player 1 Season Stats": {
+      "main": [
+        [
+          {
+            "node": "Fetch Player 2 Season Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Player 2 Season Stats": {
+      "main": [
+        [
+          {
+            "node": "Build Season-Based Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Season-Based Metrics": {
+      "main": [
+        [
+          {
+            "node": "AI Comparison Agent (Season)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Comparison Agent (Season)": {
+      "main": [
+        [
+          {
+            "node": "Assemble Season Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Season Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Season Comparison",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Comparison Agent (Match)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Comparison Agent (Season)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "3QsmMYW9J42g4Sod",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "d31e6903-1eb9-42f8-a4e8-cd4f64a2437a",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "92faf1cba5ccddd78df8a90e55982d81ef67d5c78fcc2d3a2bcd3480061255fc"
+  },
+  "nodeGroups": [],
+  "id": "rVmSKEMTjzEqpat8",
+  "tags": []
+}
