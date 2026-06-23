@@ -1,0 +1,99 @@
+{
+  "name": "Error Detection — Match Analyst",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "64282605-dace-4886-a136-8b9b4a95ac75",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst workflowName = data.workflow?.name || 'Unknown Workflow';\nconst workflowId = data.workflow?.id || '';\nconst executionId = data.execution?.id || '';\nconst errorMessage = data.error?.message || 'Unknown error';\nconst errorNode = data.error?.node?.name || data.lastNodeExecuted || 'Unknown node';\nconst executionUrl = data.execution?.url || ('https://omar7055.app.n8n.cloud/workflow/' + workflowId + '/executions/' + executionId);\nconst now = new Date().toLocaleString('en-US', { timeZone: 'Africa/Cairo', dateStyle: 'full', timeStyle: 'medium' });\nconst workflowNumber = workflowName.includes('1') ? '1' : workflowName.includes('2') ? '2' : workflowName.includes('3') ? '3' : '?';\nconst subject = '🚨 Error in ' + workflowName + ' — Node: ' + errorNode;\nconst html = `\n<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f5f5f5;padding:20px;'>\n  <div style='background:#ff4d6d;padding:20px 24px;border-radius:8px 8px 0 0;'>\n    <h1 style='color:#fff;margin:0;font-size:20px;'>🚨 Workflow Error Detected</h1>\n    <p style='color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:13px;'>Match Analyst Platform — Automated Alert</p>\n  </div>\n  <div style='background:#fff;padding:24px;border-radius:0 0 8px 8px;border:1px solid #e0e0e0;border-top:none;'>\n    <table style='width:100%;border-collapse:collapse;'>\n      <tr><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;width:160px;'><strong style='color:#666;font-size:13px;'>Workflow</strong></td><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:14px;color:#1a1a1a;'>${workflowName}</td></tr>\n      <tr><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;'><strong style='color:#666;font-size:13px;'>Workflow #</strong></td><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:14px;color:#1a1a1a;'>Workflow ${workflowNumber}</td></tr>\n      <tr><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;'><strong style='color:#666;font-size:13px;'>Failed Node</strong></td><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;'><span style='background:#fff0f2;color:#ff4d6d;padding:2px 8px;border-radius:4px;font-size:13px;font-family:monospace;border:1px solid #ffc0cb;'>${errorNode}</span></td></tr>\n      <tr><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;'><strong style='color:#666;font-size:13px;'>Error Message</strong></td><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#cc0000;font-family:monospace;'>${errorMessage}</td></tr>\n      <tr><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;'><strong style='color:#666;font-size:13px;'>Execution ID</strong></td><td style='padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#666;font-family:monospace;'>#${executionId}</td></tr>\n      <tr><td style='padding:10px 0;'><strong style='color:#666;font-size:13px;'>Time (Cairo)</strong></td><td style='padding:10px 0;font-size:13px;color:#1a1a1a;'>${now}</td></tr>\n    </table>\n    <div style='margin-top:24px;'>\n      <a href='${executionUrl}' style='background:#1a1a1a;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-size:13px;display:inline-block;'>View Execution in n8n →</a>\n    </div>\n    <p style='margin-top:20px;font-size:12px;color:#999;'>This alert was sent automatically by your Match Analyst error monitoring workflow.</p>\n  </div>\n</div>`;\nreturn [{ json: { subject, html, workflowName, errorNode, errorMessage, executionUrl } }];"
+      },
+      "id": "99367af1-41ee-47ed-86d4-a30c6b03b35f",
+      "name": "Build Email Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "omarbusiness10000@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Match Analyst Monitor"
+        }
+      },
+      "id": "9655ee8a-12f2-478a-8bda-a40a2e0f2578",
+      "name": "Send Error Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "webhookId": "1d498b16-f581-4d06-a0bf-f225922abcd2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1bSVXn4gBMAFBdxA",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Email Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Email Content": {
+      "main": [
+        [
+          {
+            "node": "Send Error Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "3QsmMYW9J42g4Sod",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "436b4305-2fba-4d6e-b7e1-cce603ab57e8",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "92faf1cba5ccddd78df8a90e55982d81ef67d5c78fcc2d3a2bcd3480061255fc"
+  },
+  "nodeGroups": [],
+  "id": "3QsmMYW9J42g4Sod",
+  "tags": []
+}
